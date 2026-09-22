@@ -27,7 +27,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:
 
 @media(max-width:700px){#chooser{padding:12px}.panel{padding:20px 14px}.choices{grid-template-columns:1fr;gap:10px}.choice{padding:18px 14px}.content{padding:10px}.head{padding:9px}.member-grid,.service-grid{grid-template-columns:1fr}.attendance-row{grid-template-columns:1fr}.adminbar{flex-wrap:wrap}.adminbar .spacer{display:none}.editor-table{display:block;overflow:auto;white-space:nowrap}}
 </style></head><body>
-<div id="adminBar" class="adminbar hidden"><span class="admin-indicator">🔧 ADMIN-MODUS</span><span class="spacer"></span><button class="btn white" id="adminHomeBtn">← Startseite</button><button class="btn red" id="saveBtn">Speichern</button><button class="btn gray" id="exitAdminBtn">Admin-Modus verlassen</button><button class="btn white" id="adminSettingsBtn">Admin-Einstellungen</button></div>
+<div id="adminBar" class="adminbar hidden"><span class="admin-indicator">🔧 ADMIN-MODUS</span><span class="spacer"></span><button class="btn white" id="adminHomeBtn">← Startseite</button><button class="btn red" id="saveBtn">💾 Speichern</button><button class="btn gray" id="exitAdminBtn">Admin-Modus verlassen</button><button class="btn white" id="adminSettingsBtn">Admin-Einstellungen</button></div>
 <section id="chooser"><div class="panel"><div class="brand">GRUPPE-2.1</div><h1>SEG San 1 - Gruppe 2.1</h1><p class="lead">Wähle einen Bereich aus.</p><div class="choices">
 <a class="choice" href="#admin" id="adminChoice"><div class="icon">⚙️</div><h2>Admin</h2><p>Passwortgeschützter Bearbeitungsmodus</p></a>
 <a class="choice" href="#services" id="servicesChoice"><div class="icon">📅</div><h2>Dienste</h2><p>Termine und Dienstanwesenheiten verwalten</p></a>
@@ -504,24 +504,56 @@ function openDataEditor(key){if(!adminUnlocked)return;const arr=clone(settings.c
 function findStatementEnd(html,start){let quote=null,escp=false,depth=0;for(let i=start;i<html.length;i++){const c=html[i];if(quote){if(escp)escp=false;else if(c==='\\')escp=true;else if(c===quote)quote=null;continue}if(c==='"'||c==="'"){quote=c;continue}if(c==='{'||c==='['||c==='(')depth++;else if(c==='}'||c===']'||c===')')depth--;else if(c===';'&&depth===0)return i}return -1}
 function replaceConst(html,name,value){const marker='const '+name+'=';const start=html.indexOf(marker);if(start<0)return html;const semi=findStatementEnd(html,start+marker.length);if(semi<0)return html;return html.slice(0,start)+marker+JSON.stringify(value)+html.slice(semi+1)}
 function buildFile(){normalizeChecklistBarcodes();let out=document.documentElement.outerHTML;const safeSettings=clone(settings);out=replaceConst(out,'INITIAL_CHECKLISTS',settings.checklists);out=replaceConst(out,'DEFAULT_SETTINGS',safeSettings);return '<!doctype html>\n'+out}
-let linkedFileHandle=null;
 async function saveToFile(){
   if(!adminUnlocked)return;
-  if(!confirm('Möchtest du wirklich speichern? Die aktuelle Gruppe-2.1.html wird mit den gespeicherten Änderungen überschrieben.'))return;
+  if(!confirm('Möchtest du die aktuellen Änderungen direkt auf GitHub speichern?'))return;
+
   const html=buildFile();
+  const oldText=saveBtn.textContent;
+  saveBtn.disabled=true;
+  saveBtn.textContent='⏳ Speichere …';
+
   try{
-    if(!linkedFileHandle){
-      if(!window.showOpenFilePicker)throw new Error('FILE_PICKER_UNSUPPORTED');
-      const handles=await window.showOpenFilePicker({multiple:false,types:[{description:'HTML-Datei',accept:{'text/html':['.html','.htm']}}]});
-      linkedFileHandle=handles[0];
+    if(!supabaseClient) throw new Error('SUPABASE_NOT_READY');
+
+    const {data:{session},error:sessionError}=await supabaseClient.auth.getSession();
+    if(sessionError) throw sessionError;
+    if(!session?.access_token) throw new Error('NO_SESSION');
+
+    const functionUrl='https://bnbquapqhiszpgnmxlkf.supabase.co/functions/v1/update-github-html';
+
+    const response=await fetch(functionUrl,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+session.access_token,
+        'apikey':SUPABASE_KEY
+      },
+      body:JSON.stringify({html})
+    });
+
+    let result={};
+    try{result=await response.json()}catch(_){}
+
+    if(!response.ok || !result.success){
+      console.error('GitHub-Speichern',result);
+      const detail=result?.details?.message||result?.error||('HTTP '+response.status);
+      throw new Error(detail);
     }
-    const writable=await linkedFileHandle.createWritable();
-    await writable.write(html);await writable.close();
-    toast('Gruppe-2.1.html wurde direkt gespeichert.');
+
+    toast('🟢 Änderungen erfolgreich auf GitHub gespeichert.');
   }catch(e){
-    if(e?.name==='AbortError')return;
-    if(e?.message==='FILE_PICKER_UNSUPPORTED'){alert('Dieser Browser unterstützt das direkte Überschreiben einer bestehenden HTML-Datei nicht. Bitte die Seite mit einem aktuellen Chromium-/Edge-/Chrome-Browser öffnen.');return;}
-    linkedFileHandle=null;alert('Die Datei konnte nicht direkt gespeichert werden. Bitte beim nächsten Speichern die bestehende Gruppe-2.1.html erneut auswählen.');
+    console.error('GitHub-Speichern',e);
+    if(e?.message==='NO_SESSION'){
+      alert('Du bist nicht mit Supabase angemeldet. Bitte zuerst anmelden.');
+    }else if(e?.message==='SUPABASE_NOT_READY'){
+      alert('Die Supabase-Verbindung ist noch nicht bereit. Bitte kurz warten und erneut versuchen.');
+    }else{
+      alert('Die Änderungen konnten nicht auf GitHub gespeichert werden.\n\n'+String(e?.message||e));
+    }
+  }finally{
+    saveBtn.disabled=false;
+    saveBtn.textContent=oldText;
   }
 }
 function exportMembers(){const rows=settings.members.map(m=>[m.lastname,m.firstname,m.birthdate,m.locker,m.changeRoom,m.status].map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';'));const csv='Nachname;Vorname;Geburtsdatum;Spindnummer;Umkleide;Status\n'+rows.join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='Mitglieder.csv';a.click()}
