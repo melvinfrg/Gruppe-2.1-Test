@@ -726,10 +726,15 @@ window.addEventListener('message',e=>{
     return;
   }
   if(e.data?.type==='group21-material-change'){
-    const item=(settings.checklists[currentVehicle]||[]).find(x=>x.id===e.data.id);
-    if(!item)return;
-    const key=e.data.key;
+    const id=String(e.data.id||'');
+    const key=String(e.data.key||'');
     const value=e.data.value??'';
+    let item=null;
+    for(const arr of Object.values(settings.checklists||{})){
+      const found=(arr||[]).find(x=>String(x.id)===id);
+      if(found){item=found;break;}
+    }
+    if(!item){console.warn('Material-Sync: Artikel nicht gefunden',e.data);return;}
     if(key) item[key]=value;
     if(key==='actual') syncMaterialChange(item.id,'actual',value);
     else if(key==='expiry') syncMaterialChange(item.id,'expiry',value);
