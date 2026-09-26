@@ -519,13 +519,23 @@ function memberToDb(m){return {id:m.id,last_name:m.lastname,first_name:m.firstna
 function dbToService(s,a){return normalizeService({id:s.id,title:s.title,start_date:s.start_date,end_date:s.end_date,start_time:s.start_time,end_time:s.end_time,location:s.location,category:s.category,notes:s.notes||'',dates:dateRange(s.start_date,s.end_date),date:s.start_date,from:String(s.start_time||'').slice(0,5),to:String(s.end_time||'').slice(0,5),place:s.location,type:s.category,attendance:a})}
 function dateRange(a,b){if(!a)return [];const o=[];let d=new Date(a+'T00:00:00'),e=new Date((b||a)+'T00:00:00');while(d<=e){o.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1)}return o}
 async function syncMaterialChange(id,key,value){
-  if(!supabaseReady)return;
+  if(!supabaseReady){toast('⚠️ Supabase ist noch nicht bereit.');return;}
   const p={};
   if(key==='actual')p.actual_stock=value;
   if(key==='expiry')p.expiry_date=value;
   if(key==='note')p.notes=value;
-  const {error}=await supabaseClient.from('materials').update(p).eq('id',id);
-  if(error){console.error('Material-Sync',error);toast('⚠️ Änderung konnte nicht synchronisiert werden.');return}
+  const {data,error}=await supabaseClient.from('materials').update(p).eq('id',id).select('id,actual_stock,expiry_date,notes').maybeSingle();
+  if(error){
+    console.error('Material-Sync',error);
+    toast('⚠️ Supabase-Fehler: '+(error.message||error));
+    return;
+  }
+  if(!data){
+    console.error('Material-Sync: keine Zeile aktualisiert',{id,key,value});
+    toast('⚠️ Keine Material-Zeile aktualisiert.');
+    return;
+  }
+  toast('🟢 Änderung in Supabase gespeichert.');
   await refreshMaterialFromSupabase(id);
 }
 async function refreshMaterialFromSupabase(id){
