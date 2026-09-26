@@ -696,6 +696,11 @@ document.addEventListener('change',function(e){
 },true);
 })();<\/script>`;
   let src=ORIGINALS[k].replace(/const base\s*=\s*\[[\s\S]*?\];/,()=>`const base=${JSON.stringify(d)};`);
+  /* Supabase ist die gemeinsame Quelle der Wahrheit. Alte lokale Ist-Werte dürfen die Datenbankwerte nicht überschreiben. */
+  if(k==='49-17-9'){
+    src=src.replace(/readState\(\);/g,'state={};');
+    src=src.replace(/function setValue\(id,key,value\)\{[\\s\\S]*?\n\}/,"function setValue(id,key,value){\n  if(!state[id]) state[id]={};\n  state[id][key]=value;\n  try{localStorage.setItem(\"checkliste17-9-state\",JSON.stringify(state));}catch(e){}\n  try{parent.postMessage({type:\"group21-material-change\",id,key,value},\"*\");}catch(e){}\n}");
+  }
   if(k==='49-96-3'){src=src.replace(/<div class=\"row\"><div><b>/g,'<div class=\"row material-row\"><div><b>');src=src.replace(/<div class=\"row med\"><div><b>/g,'<div class=\"row med material-row\"><div><b>');}
   src=src.replace('</body>',bridge+'</body>');
   frame.srcdoc=src;chooser.style.display='none';viewer.classList.remove('hidden')}
