@@ -621,7 +621,26 @@ function openAdmin(){const p=askPassword('Admin');const entered=String(p??'').tr
 function exitAdmin(){adminUnlocked=false;settings=clone(DEFAULT_SETTINGS);updateHome();document.getElementById('adminBar').classList.add('hidden');hidePages();toast('Admin-Modus beendet. Nicht gespeicherte Änderungen wurden verworfen.')}
 async function openAdminSettings(){if(!adminUnlocked)return;chooser.style.display='none';adminPage.classList.remove('hidden');adminPasswordInput.value=settings.adminPassword;memberPasswordInput.value=settings.memberPassword;vehicleName1.value=settings.vehicles['49-17-9'].name;vehicleDesc1Edit.value=settings.vehicles['49-17-9'].desc;vehicleName2.value=settings.vehicles['49-96-3'].name;vehicleDesc2Edit.value=settings.vehicles['49-96-3'].desc;await loadAdminFeedback()}
 function backHome(){if(adminUnlocked){hidePages()}else hidePages()}
-function openVehicle(k){
+async function refreshVehicleMaterialsFromSupabase(k){
+  if(!supabaseReady||!k)return;
+  try{
+    const {data:check,error:ce}=await supabaseClient.from('checklists').select('id,name').eq('name',k).maybeSingle();
+    if(ce||!check)throw ce||new Error('Checkliste nicht gefunden: '+k);
+    const {data:mats,error:me}=await supabaseClient.from('materials').select('id,actual_stock,expiry_date,notes').eq('checklist_id',check.id);
+    if(me)throw me;
+    const map=new Map((mats||[]).map(m=>[String(m.id),m]));
+    for(const item of (settings.checklists[k]||[])){
+      const m=map.get(String(item.id));
+      if(!m)continue;
+      item.actual=m.actual_stock??'';
+      item.expiry=m.expiry_date??'';
+      item.note=m.notes??'';
+    }
+  }catch(e){
+    console.error('Material-Refresh',e);
+  }
+}
+async function openVehicle(k){
   currentVehicle=k;
   viewerTitle.textContent=settings.vehicles[k].name;
   viewerMode.textContent=adminUnlocked?'ADMIN – Bearbeitung möglich':'Ansicht';
@@ -630,6 +649,7 @@ function openVehicle(k){
   barcodeScanBtn.classList.remove('hidden');
   barcodeScanBtn.style.display='inline-flex';
   viewerMode.style.background=adminUnlocked?'#fff3cd':'#eaf2f8';
+  await refreshVehicleMaterialsFromSupabase(k);
   let d=clone(settings.checklists[k]);
   const bridge=`<script>(function(){
 function rowFor(el){return el&&el.closest?el.closest('.material-row'):null;}
@@ -703,7 +723,34 @@ document.addEventListener('change',function(e){
   }
   if(k==='49-96-3'){src=src.replace(/<div class=\"row\"><div><b>/g,'<div class=\"row material-row\"><div><b>');src=src.replace(/<div class=\"row med\"><div><b>/g,'<div class=\"row med material-row\"><div><b>');}
   src=src.replace('</body>',bridge+'</body>');
-  frame.srcdoc=src;chooser.style.display='none';viewer.classList.remove('hidden')}
+  frame.srcdoc=src;
+  frame.onload=()=>{
+    try{
+      const doc=frame.contentDocument;
+      if(!doc)return;
+      doc.querySelectorAll('.material-row[data-item-id] input, .material-row[data-item-id] textarea').forEach(input=>{
+        if(input.dataset.group21Bound==='1')return;
+        input.dataset.group21Bound='1';
+        input.addEventListener('input',()=>{
+          const row=input.closest('.material-row');
+          if(!row)return;
+          const id=row.dataset.itemId;
+          const inputs=[...row.querySelectorAll('input,textarea')];
+          const pos=inputs.indexOf(input);
+          const key=row.classList.contains('med')?['inventory','serial','next','note'][pos]:['actual','expiry','note'][pos];
+          if(!key)return;
+          const value=input.value||'';
+          const item=(settings.checklists[k]||[]).find(x=>String(x.id)===String(id));
+          if(item)item[key]=value;
+          syncMaterialChange(id,key,value);
+        });
+        input.addEventListener('change',()=>{
+          input.dispatchEvent(new Event('input',{bubbles:false}));
+        });
+      });
+    }catch(e){console.error('Material-Bind',e)}
+  };
+  chooser.style.display='none';viewer.classList.remove('hidden')}
 function openArticleInfo(item,key=currentVehicle){
   if(!item)return;
   const codes=Array.isArray(item.barcodes)?item.barcodes:(item.barcode?[item.barcode]:[]);
