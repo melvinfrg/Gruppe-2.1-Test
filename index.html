@@ -465,7 +465,7 @@ function send(e){
   const key=keyFor(row,e.target); if(!key)return;
   const value=e.target.value||'';
   updateLocal(id,key,value,row);
-  parent.postMessage({type:'group21-material-change',id,key,value},'*');
+  /* Materialänderungen werden jetzt direkt vom Elternfenster an Supabase synchronisiert. */
 }
 document.addEventListener('click',function(e){
   const row=rowFor(e.target); if(!row)return;
@@ -477,7 +477,6 @@ document.addEventListener('click',function(e){
 document.addEventListener('input',function(e){
   if(!e.target.matches('input,textarea'))return;
   send(e);
-  e.stopImmediatePropagation();
 },true);
 /* Change is needed for date fields and for compatibility; the parent performs the real save. */
 document.addEventListener('change',function(e){
