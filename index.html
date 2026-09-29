@@ -832,8 +832,7 @@ async function showBarcodeCode(code){
    @zxing/browser benötigt @zxing/library – daher zuerst die Bibliothek laden. */
 function loadZXing(){
   if(window.ZXingBrowser?.BrowserMultiFormatReader)return Promise.resolve(window.ZXingBrowser);
-  const lib=window.ZXing?Promise.resolve():loadScript('https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js');
-  return lib.then(()=>loadScript('https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js'))
+     return loadScript('https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js')
     .then(()=>{if(!window.ZXingBrowser?.BrowserMultiFormatReader)throw Object.assign(new Error('ZXing nicht verfügbar'),{name:'ScriptError'});return window.ZXingBrowser});
 }
 function cameraErrorText(e){
